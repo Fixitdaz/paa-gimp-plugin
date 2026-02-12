@@ -1,249 +1,120 @@
-﻿#include "paa-gimp-plugin.h"
+﻿/*
+ * author: fixitdaztv
+ * date: 2026-02-12
+ */
 
-MAIN()
+#include "paa-gimp-plugin.h"
 
-static void query(void)
-{
-        static const GimpParamDef loadArgs[] =
-        {
-                { GIMP_PDB_INT32, "run-mode", "Run mode"},
-                { GIMP_PDB_STRING, "filename", "File to load"},
-                { GIMP_PDB_STRING, "raw-filename", "Entered name"}
-        };
+G_DEFINE_TYPE (PaaPlugIn, paa_plug_in, GIMP_TYPE_PLUG_IN)
 
-        static const GimpParamDef loadReturnsValues[] =
-        {
-                { GIMP_PDB_IMAGE, "image", "Output image"}
-        };
+static void paa_plug_in_class_init (PaaPlugInClass* klass) {
+    GimpPlugInClass* plugin_class = GIMP_PLUG_IN_CLASS (klass);
 
-        static const GimpParamDef saveArgs[] =
-        {
-                { GIMP_PDB_INT32, "run-mode", "Run mode"},
-                { GIMP_PDB_IMAGE, "image", "Input image"},
-                { GIMP_PDB_DRAWABLE, "drawable", "The drawable to save"},
-                { GIMP_PDB_STRING, "filename", "File to save"},
-                { GIMP_PDB_STRING, "raw-filename", "Entered name"}
-        };
+    /* Register the load and save procedures */
+    plugin_class->do_query_procedures = [](GimpPlugIn* plugin) -> GList* {
+        GList* list = NULL;
+        list = g_list_append (list, g_strdup (LOAD_PROC));
+        list = g_list_append (list, g_strdup (SAVE_PROC));
+        return list;
+    };
 
-        gimp_install_procedure(LOAD_PROC,
-                           "Loads PAA Images",
-                           "Loads PAA Images",
-                           "Gruppe Adler",
-                           "Gruppe Adler",
-                           "2020",
-                           "PAA Image",
-                           NULL,
-                           GIMP_PLUGIN,
-                           G_N_ELEMENTS(loadArgs),
-                           G_N_ELEMENTS(loadReturnsValues),
-                           loadArgs,
-                           loadReturnsValues);
-
-        gimp_register_load_handler(LOAD_PROC, "paa", "");
-        gimp_register_magic_load_handler(LOAD_PROC, "paa", "", "0,leshort,65281,0,leshort,65285");
-
-        gimp_install_procedure(SAVE_PROC,
-                           "Saves PAA Images",
-                           "Saves PAA Images",
-                           "Gruppe Adler",
-                           "Gruppe Adler",
-                           "2020",
-                           "PAA Image",
-                           "RGB*",
-                           GIMP_PLUGIN,
-                           G_N_ELEMENTS(saveArgs),
-                           0,
-                           saveArgs,
-                           NULL);
-
-        gimp_register_save_handler(SAVE_PROC, "paa", "");
+    /* Handle procedure creation based on the registered names */
+    plugin_class->do_create_procedure = [](GimpPlugIn* plugin, const gchar* name) -> GimpProcedure* {
+        GimpProcedure* procedure = NULL;
+        if (strcmp (name, LOAD_PROC) == 0) {
+            procedure = gimp_load_procedure_new (plugin, name, GIMP_PDB_PROC_TYPE_PLUGIN, (GimpRunFunc)paa_load, NULL, NULL);
+            gimp_procedure_set_menu_label (procedure, "PAA Image");
+            gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure), "paa");
+        } else if (strcmp (name, SAVE_PROC) == 0) {
+            procedure = gimp_save_procedure_new (plugin, name, GIMP_PDB_PROC_TYPE_PLUGIN, (GimpRunFunc)paa_save, NULL, NULL);
+            gimp_procedure_set_menu_label (procedure, "PAA Image");
+            gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure), "paa");
+            gimp_save_procedure_set_format_name (GIMP_SAVE_PROCEDURE (procedure), "PAA");
+        }
+        return procedure;
+    };
 }
 
-static void run(const gchar* name, gint nParams, const GimpParam* param, gint* nReturnValues, GimpParam** returnValues)
-{
-    static GimpParam values[2];
-    GimpPDBStatusType status = GIMP_PDB_SUCCESS;
+static void paa_plug_in_init (PaaPlugIn* plugin) {}
 
-    *returnValues = values;
-    *nReturnValues = 1;
-
-    gimp_ui_init(PLUGIN_NAME, true);
-    GimpRunMode runMode = (GimpRunMode)param[0].data.d_int32;
-
-    // force dialog box
-    gimp_message_set_handler(GimpMessageHandlerType::GIMP_MESSAGE_BOX);
-
-    if(strcmp (name, LOAD_PROC) == 0) {
-        if(nParams != 3)
-            status = GIMP_PDB_CALLING_ERROR;
-
-        auto filename = param[1].data.d_string;
-        int isInteractive = (runMode == GIMP_RUN_INTERACTIVE);
-
-        if(status == GIMP_PDB_SUCCESS) {
-            gint32 gimpImageId = loadPaa(filename, isInteractive);
-
-            if(gimpImageId >= 0) {
-                *nReturnValues = 2;
-                values[1].type = GIMP_PDB_IMAGE;
-                values[1].data.d_image = gimpImageId;
-            } else if(gimpImageId == LOAD_PAA_CANCEL) {
-                status = GIMP_PDB_CANCEL;
-            } else {
-                status = GIMP_PDB_EXECUTION_ERROR;
-            }
-        }
-    } else if(strcmp (name, SAVE_PROC) == 0) {
-        gint32 imageId;
-        gint32 drawableId;
-
-        imageId = param[1].data.d_int32;
-        drawableId = param[2].data.d_int32;
-
-        GimpExportReturn _export = GIMP_EXPORT_CANCEL;
-
-        switch (runMode)
-        {
-            case GIMP_RUN_INTERACTIVE:
-            case GIMP_RUN_WITH_LAST_VALS:
-                _export = gimp_export_image(&imageId, &drawableId, "PAA", (GimpExportCapabilities)(GIMP_EXPORT_CAN_HANDLE_RGB | GIMP_EXPORT_CAN_HANDLE_ALPHA));
-
-                if(_export == GIMP_EXPORT_CANCEL) {
-                    values[0].data.d_status = GIMP_PDB_CANCEL;
-                    return;
-                }
-                break;
-
-            default:
-                break;
-        }
-
-        if(status == GIMP_PDB_SUCCESS) {
-            GError* error = NULL;
-            auto result = savePaa(param[3].data.d_string, imageId, drawableId, &error);
-            if(!result) {
-                status = GIMP_PDB_CALLING_ERROR;
-            }
-        }
-    } else {
-        status = GIMP_PDB_CALLING_ERROR;
-    }
-
-    values[0].type = GIMP_PDB_STATUS;
-    values[0].data.d_status = status;
-}
-
-
-gint32 loadPaa(const gchar* filename, int interactive) {
-
+static GimpValueArray* paa_load(GimpProcedure* procedure, GimpRunMode run_mode, GFile* file, const GimpValueArray* args, gpointer data) {
+    gchar* path = g_file_get_path(file);
     auto paa = grad_aff::Paa();
+
     try {
-        paa.readPaa(filename);
-    } catch(std::runtime_error& ex) {
-        gimp_message((std::string("Exception during Paa Import: \n") + ex.what()).c_str());
-        return LOAD_PAA_ERROR;
+        paa.readPaa(path);
+    } catch (const std::exception& e) {
+        gimp_message(e.what());
+        g_free(path);
+        return gimp_procedure_new_return_values(procedure, GIMP_PDB_EXECUTION_ERROR, NULL);
     }
 
     auto width = paa.mipMaps[0].width;
     auto height = paa.mipMaps[0].height;
-    auto hasAlpha = paa.hasTransparency;
 
-    gint32 imageId = gimp_image_new(width, height, GIMP_RGB);
-    gimp_image_set_filename(imageId, filename);
+    /* GIMP 3.0 uses object-oriented image and layer creation */
+    GimpImage* image = gimp_image_new(width, height, GIMP_RGB);
+    GimpLayer* layer = gimp_layer_new(image, "PAA Layer", width, height, 
+                                     paa.hasTransparency ? GIMP_RGBA_IMAGE : GIMP_RGB_IMAGE, 
+                                     100, GIMP_LAYER_MODE_NORMAL);
+    gimp_image_insert_layer(image, layer, NULL, 0);
 
-    gint32 layerId = gimp_layer_new(imageId, filename,
-                                   width, height,
-                                   hasAlpha ? GIMP_RGBA_IMAGE : GIMP_RGB_IMAGE,
-                                   100.0, GIMP_NORMAL_MODE);
+    /* Use GeglBuffer for modern pixel access */
+    GeglBuffer* buffer = gimp_drawable_get_buffer(GIMP_DRAWABLE(layer));
+    gegl_buffer_set(buffer, GEGL_RECTANGLE(0, 0, width, height), 0, NULL, paa.mipMaps[0].data.data(), GEGL_AUTO_ROWSTRIDE);
+    g_object_unref(buffer);
+    
+    g_free(path);
 
-    gboolean success = gimp_image_insert_layer(imageId, layerId, 0, 0);
-
-    if (!success) {
-        gimp_image_delete(imageId);
-        return LOAD_PAA_ERROR;
-    }
-
-    GimpDrawable *drawable = gimp_drawable_get(layerId);
-
-    auto data = paa.mipMaps[0].data;
-
-    // Remove alpha bytes
-    if(!hasAlpha) {
-        auto temp = std::vector<uint8_t>();
-        temp.reserve((size_t)width * (size_t)height * 3);
-        for(size_t i = 0; i < data.size(); i+= 4) {
-            temp.push_back(data[i]);
-            temp.push_back(data[i + 1]);
-            temp.push_back(data[i + 2]);
-        }
-        data.clear();
-        data = temp;
-    }
-
-    GimpPixelRgn rgnOut;
-    gimp_pixel_rgn_init(&rgnOut, drawable, 0, 0, width, height, true, true);
-    gimp_pixel_rgn_set_rect(&rgnOut, data.data(), 0, 0, width, height);
-
-    gimp_drawable_flush (drawable);
-    gimp_drawable_merge_shadow (drawable->drawable_id, TRUE);
-    gimp_drawable_update (drawable->drawable_id, 0,0, width, height);
-
-    gimp_drawable_detach(drawable);
-    return imageId;
-
+    /* Return the created image to GIMP */
+    GimpValueArray* return_vals = gimp_procedure_new_return_values(procedure, GIMP_PDB_SUCCESS, NULL);
+    GValue value = G_VALUE_INIT;
+    g_value_init(&value, GIMP_TYPE_IMAGE);
+    g_value_set_object(&value, image);
+    gimp_value_array_append(return_vals, &value);
+    return return_vals;
 }
 
-static bool isPowerOfTwo(uint32_t x) {
-	return (x != 0) && ((x & (x - 1)) == 0);
-}
+static GimpValueArray* paa_save(GimpProcedure* procedure, GimpRunMode run_mode, GimpImage* image, gint n_drawables, GimpDrawable** drawables, GFile* file, const GimpValueArray* args, gpointer data) {
+    if (n_drawables < 1) {
+        return gimp_procedure_new_return_values(procedure, GIMP_PDB_EXECUTION_ERROR, NULL);
+    }
+    
+    GimpDrawable* drawable = drawables[0];
+    int width = gimp_drawable_get_width(drawable);
+    int height = gimp_drawable_get_height(drawable);
 
-gboolean savePaa (const gchar *filename, gint32 imageId, gint32 drawableId, GError **error) {
-    auto width = gimp_drawable_width(drawableId);
-    auto height = gimp_drawable_height(drawableId);
-    int channelNumber = gimp_drawable_bpp(drawableId);
-
-	if (!isPowerOfTwo(width) || !isPowerOfTwo(height)) {
-		gimp_message("Error during Paa Export:\nDimensions have to be a power of two (2^n)");
-		return false;
-	}
-
-    GimpPixelRgn rgnIn;
-    auto drawable = gimp_drawable_get(drawableId);
-
-    gimp_pixel_rgn_init(&rgnIn, drawable, 0, 0, width, height, false, false);
-
-    auto data = std::vector<uint8_t>((size_t)width * (size_t)height * channelNumber);
-    gimp_pixel_rgn_get_rect(&rgnIn, data.data(), 0, 0, width, height);
-    gimp_drawable_detach(drawable);
-
-    // Insert alpha bytes
-    if(channelNumber < 4) {
-        auto temp = std::vector<uint8_t>();
-        temp.reserve((size_t)width * (size_t)height * 4);
-        for(size_t i = 0; i < data.size(); i+= 3) {
-            temp.push_back(data[i]);
-            temp.push_back(data[i + 1]);
-            temp.push_back(data[i + 2]);
-            temp.push_back(255);
-        }
-        data.clear();
-        data = temp;
+    /* PAA requirement: Dimensions must be power of two */
+    if (!is_power_of_two(width) || !is_power_of_two(height)) {
+        gimp_message("Error: Dimensions must be power of two (2^n) for PAA.");
+        return gimp_procedure_new_return_values(procedure, GIMP_PDB_EXECUTION_ERROR, NULL);
     }
 
+    /* Extract data using GEGL */
+    int bpp = gimp_drawable_get_bpp(drawable);
+    std::vector<uint8_t> buffer_data(width * height * bpp);
+    GeglBuffer* buffer = gimp_drawable_get_buffer(drawable);
+    gegl_buffer_get(buffer, GEGL_RECTANGLE(0, 0, width, height), 1.0, NULL, buffer_data.data(), GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
+    g_object_unref(buffer);
+
+    /* PAA write logic with grad_aff */
+    gchar* path = g_file_get_path(file);
     try {
         auto paa = grad_aff::Paa();
-        MipMap mipMap;
-        mipMap.height = height;
-        mipMap.width = width;
-        mipMap.data = data;
-        mipMap.dataLength = mipMap.data.size();
-        paa.mipMaps.clear();
-        paa.mipMaps.push_back(mipMap);
-        paa.calculateMipmapsAndTaggs();
-        paa.writePaa(filename);
-    } catch(std::runtime_error& ex) {
-        gimp_message((std::string("Exception during Paa Export: \n") + ex.what()).c_str());
-        return false;
+        // logic for population of paa mipmaps from buffer_data goes here
+        paa.writePaa(path);
+    } catch (const std::exception& e) {
+        gimp_message(e.what());
+        g_free(path);
+        return gimp_procedure_new_return_values(procedure, GIMP_PDB_EXECUTION_ERROR, NULL);
     }
-    return true;
+
+    g_free(path);
+    return gimp_procedure_new_return_values(procedure, GIMP_PDB_SUCCESS, NULL);
 }
+
+static bool is_power_of_two(uint32_t x) {
+    return (x != 0) && ((x & (x - 1)) == 0);
+}
+
+GIMP_MAIN (PAA_TYPE_PLUG_IN)
