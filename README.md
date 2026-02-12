@@ -1,6 +1,6 @@
-<span style="color:red">
+
 # This is a work in progress and is not fully working yet
-</span>
+
  
 
 # Gruppe Adler PAA GIMP Plugin
