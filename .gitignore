@@ -1,4 +1,18 @@
-.vs
-.vscode
-build
+# author: fixitdaztv
+# date: 2026-02-12
+
+# Build artifacts
+build/
+bin/
+obj/
+
+# IDE files
+.vs/
+.vscode/
 CMakeSettings.json
+*.user
+
+# Compiled binaries
+*.exe
+*.dll
+*.a
