@@ -1,3 +1,8 @@
+<span style="color:red">
+# This is a work in progress and is not fully working yet
+</span>
+ 
+
 # Gruppe Adler PAA GIMP Plugin
 
 paa-gimp-plugin is a GIMP File Format Plugin for opening and saving Arma PAA images in GIMP. For more information on the Arma PAA file format check out the [public PAA file format specification](https://community.bistudio.com/wiki/PAA_File_Format).
